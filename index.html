@@ -36,7 +36,7 @@
             initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
         } else {
             // ============================================================
-            // ⚠️ CHAVES REAIS DO USUÁRIO INSERIDAS ⚠️
+            // ⚠️ CHAVES REAIS DO USUÁRIO ⚠️
             // ============================================================
             firebaseConfig = {
                 apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY",
@@ -159,7 +159,6 @@
 
         function App() {
              // VERIFICAÇÃO DE SEGURANÇA (Chaves)
-             // Nota: Como as chaves foram inseridas, esta verificação passará e o app iniciará normalmente.
              if (firebaseConfig.apiKey === "SUA_API_KEY_AQUI") {
                 return (
                     <div className="flex flex-col items-center justify-center h-screen bg-gray-950 p-6 text-center">
@@ -245,53 +244,55 @@
                 return () => unsubscribe();
             }, [user]);
 
-            // --- FUNÇÕES DE LOGIN COM MIGRAÇÃO DE DADOS ---
+            // --- FUNÇÕES DE LOGIN COM MIGRAÇÃO DE DADOS (OTIMIZADA EM LOTES) ---
             const handleGoogleLogin = async () => {
                 setLoginLoading(true);
                 const provider = new GoogleAuthProvider();
                 
-                // 1. ANTES DE LOGAR: Salva os dados do usuário anônimo (se houver) na memória
+                // 1. ANTES DE LOGAR: Salva os dados do usuário anônimo
                 const isAnon = user?.isAnonymous;
-                const txToMigrate = isAnon ? [...transactions] : []; // Cria uma cópia dos dados atuais
+                const txToMigrate = isAnon ? [...transactions] : [];
 
                 try {
                     const result = await signInWithPopup(auth, provider);
                     const newUser = result.user;
                     
-                    // 2. DEPOIS DE LOGAR: Verifica se precisa migrar dados
+                    // 2. DEPOIS DE LOGAR: Migração em Lotes (Batch Chunking)
                     if (isAnon && txToMigrate.length > 0 && newUser) {
-                        const batch = writeBatch(db);
                         const newColRef = typeof __firebase_config !== 'undefined' ? 
                             collection(db, 'artifacts', appId, 'users', newUser.uid, 'transactions') : 
                             collection(db, 'users', newUser.uid, 'transactions');
                         
-                        console.log(`Migrando ${txToMigrate.length} registros para a conta Google...`);
-
-                        txToMigrate.forEach(t => {
-                            const newRef = doc(newColRef); // Cria novo ID
-                            
-                            // Prepara o objeto, garantindo que a data seja um Timestamp do Firestore
-                            const data = {
-                                amount: t.amount,
-                                description: t.description,
-                                category: t.category,
-                                type: t.type,
-                                date: Timestamp.fromDate(t.date), // IMPORTANTE: Converter Date JS de volta para Timestamp
-                                createdAt: serverTimestamp(),
-                                recurrenceId: t.recurrenceId || null
-                            };
-                            if (!data.recurrenceId) delete data.recurrenceId;
-                            
-                            batch.set(newRef, data);
-                        });
+                        console.log(`Iniciando migração de ${txToMigrate.length} itens...`);
                         
-                        await batch.commit();
-                        console.log("Sucesso! Dados atribuídos à conta Google.");
+                        // Divide em pedaços de 400 (limite do Firestore é 500, usamos 400 por segurança)
+                        const chunkSize = 400;
+                        for (let i = 0; i < txToMigrate.length; i += chunkSize) {
+                            const chunk = txToMigrate.slice(i, i + chunkSize);
+                            const batch = writeBatch(db);
+                            
+                            chunk.forEach(t => {
+                                const newRef = doc(newColRef);
+                                const data = {
+                                    amount: t.amount,
+                                    description: t.description,
+                                    category: t.category,
+                                    type: t.type,
+                                    date: Timestamp.fromDate(t.date),
+                                    createdAt: serverTimestamp(),
+                                    recurrenceId: t.recurrenceId || null
+                                };
+                                if (!data.recurrenceId) delete data.recurrenceId;
+                                batch.set(newRef, data);
+                            });
+                            
+                            await batch.commit();
+                            console.log(`Lote ${i/chunkSize + 1} migrado com sucesso.`);
+                        }
                     }
 
                 } catch (error) {
                     console.error("Erro login Google:", error);
-                    // TRATAMENTO DE ERRO DE DOMÍNIO
                     if (error.code === 'auth/unauthorized-domain') {
                         const currentDomain = window.location.hostname;
                         alert(`⚠️ DOMÍNIO NÃO AUTORIZADO!\n\nO Firebase bloqueou este site (${currentDomain}).\n\nPARA CONSERTAR:\n1. Vá no console.firebase.google.com\n2. Authentication > Settings > Authorized Domains\n3. Adicione este domínio: ${currentDomain}`);
@@ -320,7 +321,6 @@
             const handleLogout = async () => {
                 try {
                     await signOut(auth);
-                    // Não precisa de reload, o estado 'user' vai virar null e mostrar LoginScreen
                 } catch (error) { console.error(error); }
             };
 
@@ -385,12 +385,12 @@
                 setIsRecurring(false); setIsModalOpen(true);
             };
 
-            // --- FUNÇÃO AJUSTADA PARA FECHAR O MODAL ---
+            // --- FUNÇÃO AJUSTADA PARA CORRIGIR BUG DO LOADING INFINITO ---
             const handleSaveTransaction = async (e) => {
                 e.preventDefault();
                 if (!amount || !description || !formDate) return;
                 
-                setIsSaving(true); // INÍCIO DO LOADING
+                setIsSaving(true); 
 
                 const num = parseFloat(amount.replace(',', '.'));
                 if (isNaN(num)) {
@@ -401,29 +401,39 @@
                 const [y, m, d] = formDate.split('-').map(Number);
                 const colRef = typeof __firebase_config !== 'undefined' ? collection(db, 'artifacts', appId, 'users', user.uid, 'transactions') : collection(db, 'users', user.uid, 'transactions');
                 
+                // Helper para Timeout
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Timeout: O banco de dados demorou muito para responder.")), 10000)
+                );
+
                 try {
-                    if (editingId) {
-                        const dt = new Date(y, m - 1, d, 12, 0, 0);
-                        const docRef = typeof __firebase_config !== 'undefined' ? doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', editingId) : doc(db, 'users', user.uid, 'transactions', editingId);
-                        await updateDoc(docRef, { type, amount: num, description, category, date: Timestamp.fromDate(dt) });
-                    } else {
-                        const batch = writeBatch(db);
-                        const iter = isRecurring ? parseInt(recurrenceCount) : 1;
-                        const rid = isRecurring ? crypto.randomUUID() : null;
-                        for (let i = 0; i < iter; i++) {
-                            const newRef = doc(colRef);
-                            const dt = new Date(y, (m - 1) + i, d, 12, 0, 0);
-                            if (dt.getDate() !== d) dt.setDate(0);
-                            let desc = description;
-                            if (isRecurring && recurrenceCount !== INFINITE_RECURRENCE_COUNT) desc = `${description} (${i + 1}/${iter})`;
-                            const data = { type, amount: num, description: desc, category, date: Timestamp.fromDate(dt), createdAt: serverTimestamp() };
-                            if (rid) data.recurrenceId = rid;
-                            batch.set(newRef, data);
+                    const operationPromise = (async () => {
+                        if (editingId) {
+                            const dt = new Date(y, m - 1, d, 12, 0, 0);
+                            const docRef = typeof __firebase_config !== 'undefined' ? doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', editingId) : doc(db, 'users', user.uid, 'transactions', editingId);
+                            await updateDoc(docRef, { type, amount: num, description, category, date: Timestamp.fromDate(dt) });
+                        } else {
+                            const batch = writeBatch(db);
+                            const iter = isRecurring ? parseInt(recurrenceCount) : 1;
+                            const rid = isRecurring ? crypto.randomUUID() : null;
+                            for (let i = 0; i < iter; i++) {
+                                const newRef = doc(colRef);
+                                const dt = new Date(y, (m - 1) + i, d, 12, 0, 0);
+                                if (dt.getDate() !== d) dt.setDate(0);
+                                let desc = description;
+                                if (isRecurring && recurrenceCount !== INFINITE_RECURRENCE_COUNT) desc = `${description} (${i + 1}/${iter})`;
+                                const data = { type, amount: num, description: desc, category, date: Timestamp.fromDate(dt), createdAt: serverTimestamp() };
+                                if (rid) data.recurrenceId = rid;
+                                batch.set(newRef, data);
+                            }
+                            await batch.commit();
                         }
-                        await batch.commit();
-                    }
+                    })();
+
+                    // Corrida entre a operação e o timeout
+                    await Promise.race([operationPromise, timeoutPromise]);
                     
-                    // Reset e FECHAR O MODAL AQUI
+                    // Sucesso
                     setAmount(''); 
                     setDescription(''); 
                     setCategory('Outros'); 
@@ -431,15 +441,13 @@
                     setIsRecurring(false); 
                     setRecurrenceCount('2'); 
                     setEditingId(null); 
-                    
-                    // FECHA O MODAL COM CERTEZA
                     setIsModalOpen(false); 
 
                 } catch (e) { 
                     console.error(e); 
-                    alert("Erro ao salvar."); 
+                    alert("Ops! Demorou muito ou houve um erro. Verifique sua conexão e tente novamente."); 
                 } finally {
-                    setIsSaving(false); // FIM DO LOADING
+                    setIsSaving(false); // GARANTE QUE O LOADING PARA
                 }
             };
 
