@@ -10,11 +10,13 @@
         body { -webkit-tap-highlight-color: transparent; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fade-in 0.2s ease-out; }
+        .animate-fade-in { animation: fade-in 0.3s ease-out; }
+        @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slide-up 0.4s ease-out; }
         ::-webkit-scrollbar { width: 0px; background: transparent; }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 font-sans antialiased">
+<body class="bg-gray-950 text-gray-100 font-sans antialiased selection:bg-blue-500 selection:text-white">
     <div id="root"></div>
     <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
@@ -22,12 +24,11 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, serverTimestamp, Timestamp, writeBatch, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-        import { Plus, TrendingUp, TrendingDown, Trash2, Wallet, X, DollarSign, Calendar, ChevronLeft, ChevronRight, Tag, Moon, Home, BarChart3, Filter, RefreshCw, Infinity as InfinityIcon, AlertCircle, Pencil, Sparkles, Bot, Loader2, AlertTriangle, LogIn, LogOut, User } from 'https://esm.sh/lucide-react@0.300.0';
+        import { Plus, TrendingUp, TrendingDown, Trash2, Wallet, X, DollarSign, Calendar, ChevronLeft, ChevronRight, Tag, Moon, Home, BarChart3, Filter, RefreshCw, Infinity as InfinityIcon, AlertCircle, Pencil, Sparkles, Bot, Loader2, AlertTriangle, LogIn, LogOut, User, ShieldCheck, Ghost } from 'https://esm.sh/lucide-react@0.300.0';
 
         // --- Configuração do Firebase ---
         let firebaseConfig, appId, initialAuthToken;
         
-        // Verifica se está no ambiente de teste ou produção
         if (typeof __firebase_config !== 'undefined') {
             firebaseConfig = JSON.parse(__firebase_config);
             appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -62,7 +63,7 @@
 
         // --- Helper Gemini API ---
         const callGemini = async (prompt, systemInstruction = "") => {
-            const apiKey = "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY"; // Insira sua API Key do Google AI Studio aqui se for usar em produção
+            const apiKey = "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY"; 
             const model = "gemini-2.5-flash-preview-09-2025";
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             const payload = { contents: [{ parts: [{ text: prompt }] }], systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined, generationConfig: { responseMimeType: "application/json" } };
@@ -75,7 +76,7 @@
         };
 
         const callGeminiText = async (prompt) => {
-            const apiKey = "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY"; // Insira sua API Key aqui também
+            const apiKey = "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY";
             const model = "gemini-2.5-flash-preview-09-2025";
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             try {
@@ -104,18 +105,80 @@
             </div>
         );
 
+        // --- COMPONENTE TELA DE LOGIN ---
+        const LoginScreen = ({ onGoogleLogin, onAnonymousLogin, loading }) => (
+            <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                {/* Background Decor */}
+                <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+                    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[100px]"></div>
+                    <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[100px]"></div>
+                </div>
+
+                <div className="z-10 w-full max-w-sm flex flex-col items-center animate-slide-up">
+                    <div className="bg-gray-800/50 p-5 rounded-3xl border border-gray-700 mb-8 shadow-2xl backdrop-blur-sm">
+                        <Wallet size={48} className="text-blue-500" />
+                    </div>
+                    
+                    <h1 className="text-3xl font-bold text-white mb-2 text-center">Minhas Finanças</h1>
+                    <p className="text-gray-400 text-center mb-10 text-sm">Controle seus gastos de forma inteligente e simples.</p>
+
+                    <div className="w-full space-y-4">
+                        <button 
+                            onClick={onGoogleLogin} 
+                            disabled={loading}
+                            className="w-full bg-white hover:bg-gray-100 text-gray-900 font-bold py-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:opacity-70"
+                        >
+                            {loading ? <Loader2 className="animate-spin" /> : <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />}
+                            Entrar com Google
+                        </button>
+                        
+                        <div className="relative flex py-2 items-center">
+                            <div className="flex-grow border-t border-gray-800"></div>
+                            <span className="flex-shrink mx-4 text-gray-600 text-xs uppercase">Ou</span>
+                            <div className="flex-grow border-t border-gray-800"></div>
+                        </div>
+
+                        <button 
+                            onClick={onAnonymousLogin}
+                            disabled={loading} 
+                            className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-4 rounded-xl flex items-center justify-center gap-3 border border-gray-700 transition-all active:scale-95 disabled:opacity-70"
+                        >
+                            {loading ? <Loader2 className="animate-spin" /> : <Ghost size={20} className="text-gray-400" />}
+                            Continuar como Convidado
+                        </button>
+                    </div>
+
+                    <p className="mt-8 text-xs text-center text-gray-600 max-w-xs">
+                        Ao entrar, seus dados serão salvos de forma segura no Firebase. O modo convidado salva apenas neste dispositivo.
+                    </p>
+                </div>
+            </div>
+        );
+
         function App() {
-            // REMOVI A TRAVA VISUAL. AGORA O APP TENTARÁ CONECTAR DIRETO.
+             // VERIFICAÇÃO DE SEGURANÇA (Chaves)
+             if (firebaseConfig.apiKey === "SUA_API_KEY_AQUI") {
+                return (
+                    <div className="flex flex-col items-center justify-center h-screen bg-gray-950 p-6 text-center">
+                        <AlertTriangle size={64} className="text-yellow-500 mb-4" />
+                        <h1 className="text-2xl font-bold text-white mb-2">Configuração Necessária</h1>
+                        <p className="text-gray-400 mb-6">Você precisa editar o arquivo <code>index.html</code> e colocar as suas chaves do Firebase.</p>
+                    </div>
+                );
+            }
 
             const [user, setUser] = useState(null);
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
+            const [loginLoading, setLoginLoading] = useState(false);
             const [authError, setAuthError] = useState(null);
+            
+            // Controle de UI
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [activeTab, setActiveTab] = useState('home'); 
             const [currentDate, setCurrentDate] = useState(new Date());
-            const [reportStartDate, setReportStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]; });
-            const [reportEndDate, setReportEndDate] = useState(() => { const d = new Date(); return d.toISOString().split('T')[0]; });
+
+            // Estados do Formulário
             const [type, setType] = useState('expense'); 
             const [amount, setAmount] = useState('');
             const [description, setDescription] = useState('');
@@ -124,32 +187,45 @@
             const [editingId, setEditingId] = useState(null);
             const [isRecurring, setIsRecurring] = useState(false);
             const [recurrenceCount, setRecurrenceCount] = useState('2');
-            const INFINITE_RECURRENCE_COUNT = '300';
+            
+            // Relatório e IA
+            const [reportStartDate, setReportStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]; });
+            const [reportEndDate, setReportEndDate] = useState(() => { const d = new Date(); return d.toISOString().split('T')[0]; });
             const [magicInput, setMagicInput] = useState('');
             const [isMagicLoading, setIsMagicLoading] = useState(false);
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+            
+            // Delete Modal
             const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, item: null });
+
+            const INFINITE_RECURRENCE_COUNT = '300';
             const expenseCategories = ['Alimentação', 'Transporte', 'Moradia', 'Saúde', 'Lazer', 'Educação', 'Compras', 'Outros'];
             const incomeCategories = ['Salário', 'Extra', 'Investimentos', 'Presente', 'Outros'];
 
             useEffect(() => {
                 const initAuth = async () => {
                     try { 
-                        if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken); 
-                        else {
-                            if (!auth.currentUser) {
-                                await signInAnonymously(auth);
-                            }
+                        // Se houver token injetado (Ambiente Imersivo), usa ele
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken); 
                         }
+                        // Se não tiver token, NÃO loga automaticamente como anônimo.
+                        // Deixa o usuário cair na tela de LoginScreen.
+                        // O onAuthStateChanged vai lidar com o resto.
                     } catch (error) { 
                         console.error("Erro auth:", error);
                         setAuthError(error.message);
-                        setLoading(false); 
+                    } finally {
+                        // Pequeno delay para evitar flash se já tiver sessão
+                         setTimeout(() => setLoading(false), 500);
                     }
                 };
                 initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    setUser(currentUser);
+                    if(currentUser) setLoading(false);
+                });
                 return () => unsubscribe();
             }, []);
 
@@ -159,30 +235,52 @@
                 const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
                     const docs = snapshot.docs.map(doc => { const data = doc.data(); return { id: doc.id, ...data, date: data.date ? data.date.toDate() : (data.createdAt?.toDate() || new Date()) }; });
                     setTransactions(docs.sort((a, b) => b.date - a.date));
-                    setLoading(false);
-                }, (error) => { console.error("Erro transactions:", error); setLoading(false); });
+                }, (error) => { console.error("Erro transactions:", error); });
                 return () => unsubscribe();
             }, [user]);
 
+            // --- FUNÇÕES DE LOGIN ---
             const handleGoogleLogin = async () => {
+                setLoginLoading(true);
                 const provider = new GoogleAuthProvider();
                 try {
                     await signInWithPopup(auth, provider);
                 } catch (error) {
-                    console.error("Erro no login Google:", error);
-                    alert("Erro ao conectar com Google. Verifique se o domínio está autorizado no Firebase.");
+                    console.error("Erro login Google:", error);
+                    // TRATAMENTO DE ERRO DE DOMÍNIO
+                    if (error.code === 'auth/unauthorized-domain') {
+                        const currentDomain = window.location.hostname;
+                        alert(`⚠️ DOMÍNIO NÃO AUTORIZADO!\n\nO Firebase bloqueou este site (${currentDomain}).\n\nPARA CONSERTAR:\n1. Vá no console.firebase.google.com\n2. Authentication > Settings > Authorized Domains\n3. Adicione este domínio: ${currentDomain}`);
+                    } else if (error.code === 'auth/popup-closed-by-user') {
+                        console.log("Usuário fechou o popup");
+                    } else {
+                        alert("Erro ao conectar Google: " + error.message);
+                    }
+                } finally {
+                    setLoginLoading(false);
+                }
+            };
+
+            const handleAnonymousLogin = async () => {
+                setLoginLoading(true);
+                try {
+                    await signInAnonymously(auth);
+                } catch (error) {
+                    console.error("Erro login anônimo:", error);
+                    alert("Erro ao entrar como convidado.");
+                } finally {
+                    setLoginLoading(false);
                 }
             };
 
             const handleLogout = async () => {
                 try {
                     await signOut(auth);
-                    window.location.reload(); 
-                } catch (error) {
-                    console.error("Erro ao sair:", error);
-                }
+                    // Não precisa de reload, o estado 'user' vai virar null e mostrar LoginScreen
+                } catch (error) { console.error(error); }
             };
 
+            // ... Demais funções de lógica ...
             const handlePrevMonth = () => { const d = new Date(currentDate); d.setMonth(currentDate.getMonth() - 1); setCurrentDate(d); };
             const handleNextMonth = () => { const d = new Date(currentDate); d.setMonth(currentDate.getMonth() + 1); setCurrentDate(d); };
             const homeFilteredTransactions = useMemo(() => transactions.filter(t => t.date.getMonth() === currentDate.getMonth() && t.date.getFullYear() === currentDate.getFullYear()), [transactions, currentDate]);
@@ -242,6 +340,7 @@
                 setFormDate(d.toISOString().split('T')[0]);
                 setIsRecurring(false); setIsModalOpen(true);
             };
+
             const handleSaveTransaction = async (e) => {
                 e.preventDefault();
                 if (!amount || !description || !formDate) return;
@@ -270,9 +369,18 @@
                         }
                         await batch.commit();
                     }
-                    setAmount(''); setDescription(''); setCategory('Outros'); setFormDate(new Date().toISOString().split('T')[0]); setIsRecurring(false); setRecurrenceCount('2'); setEditingId(null); setIsModalOpen(false);
+                    // Reset e FECHAR O MODAL AQUI
+                    setAmount(''); 
+                    setDescription(''); 
+                    setCategory('Outros'); 
+                    setFormDate(new Date().toISOString().split('T')[0]); 
+                    setIsRecurring(false); 
+                    setRecurrenceCount('2'); 
+                    setEditingId(null); 
+                    setIsModalOpen(false); // <--- GARANTINDO QUE FECHA
                 } catch (e) { console.error(e); alert("Erro ao salvar."); }
             };
+
             const executeDelete = async (deleteSeries = false) => {
                 const item = deleteConfirmation.item;
                 if (!item) return;
@@ -300,9 +408,15 @@
                 } catch (e) { console.error(e); alert("Erro ao excluir."); }
             };
 
-            if (authError) return <div className="flex flex-col items-center justify-center h-screen p-4 text-center"><AlertTriangle size={48} className="text-red-500 mb-2"/><p className="text-white">Erro de Autenticação: {authError}</p></div>;
-            if (loading && !user) return <div className="flex items-center justify-center h-screen bg-gray-950"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
+            // RENDERIZAÇÃO CONDICIONAL
+            if (loading) return <div className="flex items-center justify-center h-screen bg-gray-950"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
+            
+            // SE NÃO TIVER USUÁRIO, MOSTRA TELA DE LOGIN
+            if (!user) {
+                return <LoginScreen onGoogleLogin={handleGoogleLogin} onAnonymousLogin={handleAnonymousLogin} loading={loginLoading} />;
+            }
 
+            // SE TIVER USUÁRIO, MOSTRA O APP PRINCIPAL
             return (
                 <div className="min-h-screen bg-gray-950 font-sans pb-24 text-gray-100">
                     {activeTab === 'home' && (
@@ -313,17 +427,10 @@
                                     <h2 className="text-lg font-semibold capitalize text-gray-100">{currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2>
                                     <button onClick={handleNextMonth} className="p-1 hover:bg-gray-700 rounded-full text-gray-300"><ChevronRight size={24} /></button>
                                     
-                                    {/* USER LOGIN/LOGOUT BUTTON ABSOLUTE POSITIONED */}
                                     <div className="absolute right-[-15px] sm:right-[-40px] top-1/2 transform -translate-y-1/2">
-                                        {user?.isAnonymous ? (
-                                            <button onClick={handleGoogleLogin} title="Salvar dados (Entrar com Google)" className="bg-white text-blue-600 p-2 rounded-full shadow-lg hover:bg-gray-100 transition-all">
-                                                <LogIn size={18} />
-                                            </button>
-                                        ) : (
-                                            <button onClick={handleLogout} title="Sair" className="bg-red-500/20 text-red-400 p-2 rounded-full hover:bg-red-500/30 transition-all">
-                                                <LogOut size={18} />
-                                            </button>
-                                        )}
+                                        <button onClick={handleLogout} title="Sair" className="bg-red-500/10 text-red-400 p-2 rounded-full hover:bg-red-500/20 transition-all border border-red-500/20">
+                                            <LogOut size={18} />
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="text-center mt-4"><span className="text-gray-400 text-xs uppercase tracking-wider font-medium">Saldo do Mês</span><div className={`text-4xl font-bold mt-2 ${summary.total >= 0 ? 'text-white' : 'text-red-400'}`}>{formatCurrency(summary.total)}</div></div>
