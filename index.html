@@ -23,20 +23,19 @@
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, serverTimestamp, Timestamp, writeBatch, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-        import { Plus, TrendingUp, TrendingDown, Trash2, Wallet, X, DollarSign, Calendar, ChevronLeft, ChevronRight, Tag, Moon, Home, BarChart3, Filter, RefreshCw, Infinity as InfinityIcon, AlertCircle, Pencil, Sparkles, Bot, Loader2, AlertTriangle, LogIn, LogOut, User, ShieldCheck, Ghost } from 'https://esm.sh/lucide-react@0.300.0';
+        import { getDatabase, ref, push, set, onValue, remove, update, get, child } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { Plus, TrendingUp, TrendingDown, Trash2, Wallet, X, DollarSign, Calendar, ChevronLeft, ChevronRight, Tag, Moon, Home, BarChart3, Filter, RefreshCw, Infinity as InfinityIcon, AlertCircle, Pencil, Sparkles, Bot, Loader2, AlertTriangle, LogIn, LogOut, User, ShieldCheck, Ghost, Lock } from 'https://esm.sh/lucide-react@0.300.0';
 
         // --- Configuração do Firebase ---
         let firebaseConfig, appId, initialAuthToken;
         
         if (typeof __firebase_config !== 'undefined') {
-            // Ambiente Imersivo (Preview interna)
             firebaseConfig = JSON.parse(__firebase_config);
             appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
             initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
         } else {
             // ============================================================
-            // ⚠️ CHAVES REAIS DO USUÁRIO ⚠️
+            // ⚠️ CHAVES REAIS (Realtime Database Configurado) ⚠️
             // ============================================================
             firebaseConfig = {
                 apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY",
@@ -56,12 +55,22 @@
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
-            db = getFirestore(app);
+            db = getDatabase(app);
         } catch (e) {
             console.error("Erro ao inicializar Firebase. Verifique as chaves.", e);
         }
 
         const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+        const generateUUID = () => {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        };
 
         // --- Helper Gemini API ---
         const callGemini = async (prompt, systemInstruction = "") => {
@@ -107,10 +116,56 @@
             </div>
         );
 
-        // --- COMPONENTE TELA DE LOGIN ---
+        // --- COMPONENTE DE ERRO DE PERMISSÃO ---
+        const PermissionErrorModal = () => (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
+                <div className="bg-gray-900 border border-red-500/50 w-full max-w-lg rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-red-500/20 p-3 rounded-full">
+                            <Lock className="text-red-500" size={32} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white">Acesso Bloqueado</h3>
+                    </div>
+                    
+                    <p className="text-gray-300 mb-6 leading-relaxed">
+                        O banco de dados recusou a conexão. Isso acontece porque as <strong>Regras de Segurança</strong> do seu Firebase estão bloqueadas.
+                    </p>
+
+                    <div className="bg-black/50 p-4 rounded-xl border border-gray-800 mb-6">
+                        <p className="text-xs text-gray-400 uppercase font-bold mb-2">Como corrigir:</p>
+                        <ol className="list-decimal list-inside text-sm text-gray-300 space-y-2">
+                            <li>Acesse o <a href="https://console.firebase.google.com" target="_blank" className="text-blue-400 underline hover:text-blue-300">Console do Firebase</a>.</li>
+                            <li>Vá em <strong>Realtime Database</strong> &gt; <strong>Regras</strong>.</li>
+                            <li>Substitua o código atual por este:</li>
+                        </ol>
+                        <div className="mt-3 bg-gray-800 p-3 rounded-lg overflow-x-auto relative group">
+                            <pre className="text-xs text-green-400 font-mono">
+{`{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    }
+  }
+}`}
+                            </pre>
+                            <button onClick={() => {
+                                navigator.clipboard.writeText(`{ "rules": { "users": { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } } } }`);
+                                alert("Copiado!");
+                            }} className="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-white text-[10px] px-2 py-1 rounded transition-colors">Copiar</button>
+                        </div>
+                    </div>
+
+                    <p className="text-xs text-center text-gray-500">Após salvar as regras no console, recarregue esta página.</p>
+                </div>
+            </div>
+        );
+
         const LoginScreen = ({ onGoogleLogin, onAnonymousLogin, loading }) => (
             <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-                {/* Background Decor */}
                 <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
                     <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[100px]"></div>
                     <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[100px]"></div>
@@ -158,7 +213,7 @@
         );
 
         function App() {
-             // VERIFICAÇÃO DE SEGURANÇA (Chaves)
+             // VERIFICAÇÃO DE SEGURANÇA
              if (firebaseConfig.apiKey === "SUA_API_KEY_AQUI") {
                 return (
                     <div className="flex flex-col items-center justify-center h-screen bg-gray-950 p-6 text-center">
@@ -174,13 +229,12 @@
             const [loading, setLoading] = useState(true);
             const [loginLoading, setLoginLoading] = useState(false);
             const [authError, setAuthError] = useState(null);
+            const [permissionError, setPermissionError] = useState(false); // NOVO ESTADO
             
-            // Controle de UI
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [activeTab, setActiveTab] = useState('home'); 
             const [currentDate, setCurrentDate] = useState(new Date());
 
-            // Estados do Formulário
             const [type, setType] = useState('expense'); 
             const [amount, setAmount] = useState('');
             const [description, setDescription] = useState('');
@@ -190,10 +244,8 @@
             const [isRecurring, setIsRecurring] = useState(false);
             const [recurrenceCount, setRecurrenceCount] = useState('2');
             
-            // NOVO ESTADO: Salvando
             const [isSaving, setIsSaving] = useState(false);
             
-            // Relatório e IA
             const [reportStartDate, setReportStartDate] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]; });
             const [reportEndDate, setReportEndDate] = useState(() => { const d = new Date(); return d.toISOString().split('T')[0]; });
             const [magicInput, setMagicInput] = useState('');
@@ -201,7 +253,6 @@
             const [aiAnalysis, setAiAnalysis] = useState(null);
             const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
             
-            // Delete Modal
             const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, item: null });
 
             const INFINITE_RECURRENCE_COUNT = '300';
@@ -211,18 +262,13 @@
             useEffect(() => {
                 const initAuth = async () => {
                     try { 
-                        // Se houver token injetado (Ambiente Imersivo), usa ele
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken); 
                         }
-                        // Se não tiver token, NÃO loga automaticamente como anônimo.
-                        // Deixa o usuário cair na tela de LoginScreen.
-                        // O onAuthStateChanged vai lidar com o resto.
                     } catch (error) { 
                         console.error("Erro auth:", error);
                         setAuthError(error.message);
                     } finally {
-                        // Pequeno delay para evitar flash se já tiver sessão
                          setTimeout(() => setLoading(false), 500);
                     }
                 };
@@ -234,22 +280,38 @@
                 return () => unsubscribe();
             }, []);
 
+            // --- FETCHING DO REALTIME DATABASE ---
             useEffect(() => {
                 if (!user) return;
-                const collectionRef = typeof __firebase_config !== 'undefined' ? collection(db, 'artifacts', appId, 'users', user.uid, 'transactions') : collection(db, 'users', user.uid, 'transactions');
-                const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
-                    const docs = snapshot.docs.map(doc => { const data = doc.data(); return { id: doc.id, ...data, date: data.date ? data.date.toDate() : (data.createdAt?.toDate() || new Date()) }; });
-                    setTransactions(docs.sort((a, b) => b.date - a.date));
-                }, (error) => { console.error("Erro transactions:", error); });
+                
+                const transactionsRef = ref(db, `users/${user.uid}/transactions`);
+                
+                const unsubscribe = onValue(transactionsRef, (snapshot) => {
+                    const data = snapshot.val();
+                    setPermissionError(false); // Reset se funcionar
+                    if (data) {
+                        const docs = Object.entries(data).map(([key, value]) => ({
+                            id: key,
+                            ...value,
+                            date: new Date(value.date)
+                        }));
+                        setTransactions(docs.sort((a, b) => b.date - a.date));
+                    } else {
+                        setTransactions([]);
+                    }
+                }, (error) => {
+                    console.error("Erro transactions:", error);
+                    if (error.code === 'PERMISSION_DENIED' || error.message.includes('permission_denied')) {
+                        setPermissionError(true);
+                    }
+                });
+
                 return () => unsubscribe();
             }, [user]);
 
-            // --- FUNÇÕES DE LOGIN COM MIGRAÇÃO DE DADOS (OTIMIZADA EM LOTES) ---
             const handleGoogleLogin = async () => {
                 setLoginLoading(true);
                 const provider = new GoogleAuthProvider();
-                
-                // 1. ANTES DE LOGAR: Salva os dados do usuário anônimo
                 const isAnon = user?.isAnonymous;
                 const txToMigrate = isAnon ? [...transactions] : [];
 
@@ -257,40 +319,24 @@
                     const result = await signInWithPopup(auth, provider);
                     const newUser = result.user;
                     
-                    // 2. DEPOIS DE LOGAR: Migração em Lotes (Batch Chunking)
                     if (isAnon && txToMigrate.length > 0 && newUser) {
-                        const newColRef = typeof __firebase_config !== 'undefined' ? 
-                            collection(db, 'artifacts', appId, 'users', newUser.uid, 'transactions') : 
-                            collection(db, 'users', newUser.uid, 'transactions');
-                        
-                        console.log(`Iniciando migração de ${txToMigrate.length} itens...`);
-                        
-                        // Divide em pedaços de 400 (limite do Firestore é 500, usamos 400 por segurança)
-                        const chunkSize = 400;
-                        for (let i = 0; i < txToMigrate.length; i += chunkSize) {
-                            const chunk = txToMigrate.slice(i, i + chunkSize);
-                            const batch = writeBatch(db);
-                            
-                            chunk.forEach(t => {
-                                const newRef = doc(newColRef);
-                                const data = {
-                                    amount: t.amount,
-                                    description: t.description,
-                                    category: t.category,
-                                    type: t.type,
-                                    date: Timestamp.fromDate(t.date),
-                                    createdAt: serverTimestamp(),
-                                    recurrenceId: t.recurrenceId || null
-                                };
-                                if (!data.recurrenceId) delete data.recurrenceId;
-                                batch.set(newRef, data);
-                            });
-                            
-                            await batch.commit();
-                            console.log(`Lote ${i/chunkSize + 1} migrado com sucesso.`);
-                        }
+                        const updates = {};
+                        txToMigrate.forEach(t => {
+                            const newKey = push(ref(db, `users/${newUser.uid}/transactions`)).key;
+                            const data = {
+                                amount: t.amount,
+                                description: t.description,
+                                category: t.category,
+                                type: t.type,
+                                date: t.date.toISOString(),
+                                createdAt: new Date().toISOString(),
+                                recurrenceId: t.recurrenceId || null
+                            };
+                            if (!data.recurrenceId) delete data.recurrenceId;
+                            updates[`users/${newUser.uid}/transactions/${newKey}`] = data;
+                        });
+                        await update(ref(db), updates);
                     }
-
                 } catch (error) {
                     console.error("Erro login Google:", error);
                     if (error.code === 'auth/unauthorized-domain') {
@@ -311,7 +357,6 @@
                 try {
                     await signInAnonymously(auth);
                 } catch (error) {
-                    console.error("Erro login anônimo:", error);
                     alert("Erro ao entrar como convidado.");
                 } finally {
                     setLoginLoading(false);
@@ -324,7 +369,6 @@
                 } catch (error) { console.error(error); }
             };
 
-            // ... Demais funções de lógica ...
             const handlePrevMonth = () => { const d = new Date(currentDate); d.setMonth(currentDate.getMonth() - 1); setCurrentDate(d); };
             const handleNextMonth = () => { const d = new Date(currentDate); d.setMonth(currentDate.getMonth() + 1); setCurrentDate(d); };
             const homeFilteredTransactions = useMemo(() => transactions.filter(t => t.date.getMonth() === currentDate.getMonth() && t.date.getFullYear() === currentDate.getFullYear()), [transactions, currentDate]);
@@ -385,55 +429,67 @@
                 setIsRecurring(false); setIsModalOpen(true);
             };
 
-            // --- FUNÇÃO AJUSTADA PARA CORRIGIR BUG DO LOADING INFINITO ---
             const handleSaveTransaction = async (e) => {
                 e.preventDefault();
                 if (!amount || !description || !formDate) return;
                 
                 setIsSaving(true); 
 
-                const num = parseFloat(amount.replace(',', '.'));
-                if (isNaN(num)) {
-                    setIsSaving(false);
-                    return;
-                }
-
-                const [y, m, d] = formDate.split('-').map(Number);
-                const colRef = typeof __firebase_config !== 'undefined' ? collection(db, 'artifacts', appId, 'users', user.uid, 'transactions') : collection(db, 'users', user.uid, 'transactions');
-                
-                // Helper para Timeout
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Timeout: O banco de dados demorou muito para responder.")), 10000)
-                );
-
                 try {
-                    const operationPromise = (async () => {
-                        if (editingId) {
-                            const dt = new Date(y, m - 1, d, 12, 0, 0);
-                            const docRef = typeof __firebase_config !== 'undefined' ? doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', editingId) : doc(db, 'users', user.uid, 'transactions', editingId);
-                            await updateDoc(docRef, { type, amount: num, description, category, date: Timestamp.fromDate(dt) });
-                        } else {
-                            const batch = writeBatch(db);
-                            const iter = isRecurring ? parseInt(recurrenceCount) : 1;
-                            const rid = isRecurring ? crypto.randomUUID() : null;
-                            for (let i = 0; i < iter; i++) {
-                                const newRef = doc(colRef);
-                                const dt = new Date(y, (m - 1) + i, d, 12, 0, 0);
-                                if (dt.getDate() !== d) dt.setDate(0);
-                                let desc = description;
-                                if (isRecurring && recurrenceCount !== INFINITE_RECURRENCE_COUNT) desc = `${description} (${i + 1}/${iter})`;
-                                const data = { type, amount: num, description: desc, category, date: Timestamp.fromDate(dt), createdAt: serverTimestamp() };
-                                if (rid) data.recurrenceId = rid;
-                                batch.set(newRef, data);
-                            }
-                            await batch.commit();
-                        }
-                    })();
-
-                    // Corrida entre a operação e o timeout
-                    await Promise.race([operationPromise, timeoutPromise]);
+                    const num = parseFloat(amount.replace(',', '.'));
+                    if (isNaN(num)) throw new Error("Valor inválido");
                     
-                    // Sucesso
+                    if (!user || !user.uid) throw new Error("Usuário não autenticado");
+
+                    const [y, m, d] = formDate.split('-').map(Number);
+                    
+                    const updates = {};
+                    
+                    if (editingId) {
+                        const dt = new Date(y, m - 1, d, 12, 0, 0);
+                        const path = `users/${user.uid}/transactions/${editingId}`;
+                        const existingRecurrenceId = transactions.find(t => t.id === editingId)?.recurrenceId || null;
+
+                        updates[path] = {
+                            type, 
+                            amount: num, 
+                            description, 
+                            category, 
+                            date: dt.toISOString(), 
+                            recurrenceId: existingRecurrenceId
+                        };
+                        
+                        if (!updates[path].recurrenceId) delete updates[path].recurrenceId;
+
+                    } else {
+                        const iter = isRecurring ? parseInt(recurrenceCount) : 1;
+                        const rid = isRecurring ? generateUUID() : null;
+                        
+                        for (let i = 0; i < iter; i++) {
+                            const newKey = push(ref(db, `users/${user.uid}/transactions`)).key;
+                            const dt = new Date(y, (m - 1) + i, d, 12, 0, 0);
+                            
+                            if (dt.getDate() !== d) dt.setDate(0); 
+                            
+                            let desc = description;
+                            if (isRecurring && recurrenceCount !== INFINITE_RECURRENCE_COUNT) desc = `${description} (${i + 1}/${iter})`;
+                            
+                            const data = { 
+                                type, 
+                                amount: num, 
+                                description: desc, 
+                                category, 
+                                date: dt.toISOString(),
+                                createdAt: new Date().toISOString()
+                            };
+                            if (rid) data.recurrenceId = rid;
+                            
+                            updates[`users/${user.uid}/transactions/${newKey}`] = data;
+                        }
+                    }
+                    
+                    await update(ref(db), updates);
+                    
                     setAmount(''); 
                     setDescription(''); 
                     setCategory('Outros'); 
@@ -444,10 +500,14 @@
                     setIsModalOpen(false); 
 
                 } catch (e) { 
-                    console.error(e); 
-                    alert("Ops! Demorou muito ou houve um erro. Verifique sua conexão e tente novamente."); 
+                    console.error("Erro ao salvar:", e); 
+                    if (e.code === 'PERMISSION_DENIED' || e.message.includes('permission_denied')) {
+                         setPermissionError(true);
+                    } else {
+                        alert("Erro ao salvar: " + (e.message || "Verifique sua conexão."));
+                    }
                 } finally {
-                    setIsSaving(false); // GARANTE QUE O LOADING PARA
+                    setIsSaving(false); 
                 }
             };
 
@@ -457,43 +517,40 @@
                 setDeleteConfirmation({ isOpen: false, item: null });
                 setTransactions(prev => prev.filter(t => { if (deleteSeries) return !(t.recurrenceId === item.recurrenceId && t.date >= item.date); return t.id !== item.id; }));
                 try {
-                    const colRef = typeof __firebase_config !== 'undefined' ? collection(db, 'artifacts', appId, 'users', user.uid, 'transactions') : collection(db, 'users', user.uid, 'transactions');
                     if (deleteSeries && item.recurrenceId) {
-                        const q = query(colRef, where("recurrenceId", "==", item.recurrenceId));
-                        const snap = await getDocs(q);
-                        if (!snap.empty) {
-                             const batch = writeBatch(db);
-                             let deleteCount = 0;
-                             snap.forEach(docSnap => {
-                                 const data = docSnap.data();
-                                 const docDate = data.date ? data.date.toDate() : null;
-                                 if (docDate && docDate >= item.date) { batch.delete(docSnap.ref); deleteCount++; }
-                             });
-                             if (deleteCount > 0) await batch.commit();
+                        const itemsToDelete = transactions.filter(t => t.recurrenceId === item.recurrenceId && t.date >= item.date);
+                        if (itemsToDelete.length > 0) {
+                            const updates = {};
+                            itemsToDelete.forEach(t => { updates[`users/${user.uid}/transactions/${t.id}`] = null; });
+                            await update(ref(db), updates);
                         }
                     } else {
-                        const docRef = typeof __firebase_config !== 'undefined' ? doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', item.id) : doc(db, 'users', user.uid, 'transactions', item.id);
-                        await deleteDoc(docRef);
+                        const itemRef = ref(db, `users/${user.uid}/transactions/${item.id}`);
+                        await remove(itemRef);
                     }
-                } catch (e) { console.error(e); alert("Erro ao excluir."); }
+                } catch (e) { 
+                    console.error(e); 
+                    if (e.code === 'PERMISSION_DENIED' || e.message.includes('permission_denied')) {
+                         setPermissionError(true);
+                    } else {
+                        alert("Erro ao excluir."); 
+                    }
+                }
             };
 
-            // RENDERIZAÇÃO CONDICIONAL
             if (loading) return <div className="flex items-center justify-center h-screen bg-gray-950"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
             
-            // SE NÃO TIVER USUÁRIO, MOSTRA TELA DE LOGIN
             if (!user) {
                 return <LoginScreen onGoogleLogin={handleGoogleLogin} onAnonymousLogin={handleAnonymousLogin} loading={loginLoading} />;
             }
 
-            // SE TIVER USUÁRIO, MOSTRA O APP PRINCIPAL
             return (
-                <div className="min-h-screen bg-gray-950 font-sans pb-24 text-gray-100">
+                <div className="min-h-screen bg-gray-950 font-sans pb-24 text-gray-100 relative">
+                    {permissionError && <PermissionErrorModal />}
+
                     {activeTab === 'home' && (
                         <>
                             <header className="bg-gray-900 pt-8 pb-24 px-6 rounded-b-[2rem] shadow-lg border-b border-gray-800 relative z-10">
-                                
-                                {/* NOVA ÁREA DE LOGIN/EMAIL E BOTÃO SAIR (FLEXBOX ALINHADO À DIREITA) */}
                                 <div className="flex justify-end items-center mb-4 gap-3 relative z-20">
                                     {!user?.isAnonymous && user?.email && (
                                         <div className="flex items-center gap-2 bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-700/50 backdrop-blur-sm animate-fade-in">
