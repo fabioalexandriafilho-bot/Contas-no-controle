@@ -34,15 +34,12 @@
             initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
         } else {
             // ============================================================
-            // ⚠️ ATENÇÃO: VOCÊ PRECISA COLOCAR SUAS CHAVES AQUI ⚠️
+            // ⚠️ ÁREA DE EDIÇÃO: COLOQUE SUAS CHAVES AQUI ⚠️
             // ============================================================
-            // 1. Crie um projeto em console.firebase.google.com
-            // 2. Vá em Configurações do Projeto (engrenagem) > Geral > Seus aplicativos > Web (</>)
-            // 3. Copie o objeto 'firebaseConfig' e cole abaixo:
             firebaseConfig = {
                 apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY", 
                 authDomain: "contas-no-controle.firebaseapp.com",
-                databaseURL: "https://contas-no-controle-default-rtdb.firebaseio.com", // <-- ADICIONADO AQUI
+                databaseURL: "https://contas-no-controle-default-rtdb.firebaseio.com",
                 projectId: "contas-no-controle",
                 storageBucket: "contas-no-controle.firebasestorage.app",
                 messagingSenderId: "959394893532",
@@ -108,24 +105,7 @@
         );
 
         function App() {
-            // VERIFICAÇÃO DE SEGURANÇA: Configuração
-            if (firebaseConfig.apiKey === "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY") {
-                return (
-                    <div className="flex flex-col items-center justify-center h-screen bg-gray-950 p-6 text-center">
-                        <AlertTriangle size={64} className="text-yellow-500 mb-4" />
-                        <h1 className="text-2xl font-bold text-white mb-2">Configuração Necessária</h1>
-                        <p className="text-gray-400 mb-6">Você precisa editar o arquivo <code>index.html</code> e colocar as suas chaves do Firebase para que o banco de dados funcione.</p>
-                        <div className="bg-gray-900 p-4 rounded-lg text-left text-sm text-gray-300 font-mono overflow-x-auto w-full max-w-lg border border-gray-800">
-                            <p className="text-green-400">// Edite o trecho abaixo no código:</p>
-                            <p>firebaseConfig = &#123;</p>
-                            <p>&nbsp;&nbsp;apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY",</p>
-                            <p>&nbsp;&nbsp;authDomain: "...",</p>
-                            <p>&nbsp;&nbsp;databaseURL: "...", <span className="text-yellow-400">// Adicionado!</span></p>
-                            <p>&#125;</p>
-                        </div>
-                    </div>
-                );
-            }
+            // REMOVI A TRAVA VISUAL. AGORA O APP TENTARÁ CONECTAR DIRETO.
 
             const [user, setUser] = useState(null);
             const [transactions, setTransactions] = useState([]);
