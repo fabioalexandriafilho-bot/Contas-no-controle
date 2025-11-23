@@ -20,7 +20,6 @@
         import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        // ADICIONADO: GoogleAuthProvider, signInWithPopup, signOut
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, serverTimestamp, Timestamp, writeBatch, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { Plus, TrendingUp, TrendingDown, Trash2, Wallet, X, DollarSign, Calendar, ChevronLeft, ChevronRight, Tag, Moon, Home, BarChart3, Filter, RefreshCw, Infinity as InfinityIcon, AlertCircle, Pencil, Sparkles, Bot, Loader2, AlertTriangle, LogIn, LogOut, User } from 'https://esm.sh/lucide-react@0.300.0';
@@ -43,12 +42,13 @@
             firebaseConfig = {
                 apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY", 
                 authDomain: "contas-no-controle.firebaseapp.com",
+                databaseURL: "https://contas-no-controle-default-rtdb.firebaseio.com", // <-- ADICIONADO AQUI
                 projectId: "contas-no-controle",
                 storageBucket: "contas-no-controle.firebasestorage.app",
                 messagingSenderId: "959394893532",
                 appId: "1:959394893532:web:ede1295d8b525b61b92e19"
             };
-            appId = '"1:959394893532:web:ede1295d8b525b61b92e19'; 
+            appId = 'financas-app-prod'; 
         }
 
         // Inicializa Firebase
@@ -118,8 +118,9 @@
                         <div className="bg-gray-900 p-4 rounded-lg text-left text-sm text-gray-300 font-mono overflow-x-auto w-full max-w-lg border border-gray-800">
                             <p className="text-green-400">// Edite o trecho abaixo no código:</p>
                             <p>firebaseConfig = &#123;</p>
-                            <p>&nbsp;&nbsp;apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoYI",</p>
-                            <p>&nbsp;&nbsp;...</p>
+                            <p>&nbsp;&nbsp;apiKey: "AIzaSyDoegBbMISuRlAaqENVSHK0eh1pboWChoY",</p>
+                            <p>&nbsp;&nbsp;authDomain: "...",</p>
+                            <p>&nbsp;&nbsp;databaseURL: "...", <span className="text-yellow-400">// Adicionado!</span></p>
                             <p>&#125;</p>
                         </div>
                     </div>
@@ -157,9 +158,6 @@
                     try { 
                         if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken); 
                         else {
-                            // Tenta logar anonimamente se não houver usuário, mas permite upgrade para Google depois
-                            // O observer onAuthStateChanged vai lidar com o estado
-                            // Se não houver usuário logado, loga anonimamente para começar
                             if (!auth.currentUser) {
                                 await signInAnonymously(auth);
                             }
@@ -186,12 +184,10 @@
                 return () => unsubscribe();
             }, [user]);
 
-            // --- FUNÇÕES DE LOGIN DO GOOGLE ---
             const handleGoogleLogin = async () => {
                 const provider = new GoogleAuthProvider();
                 try {
                     await signInWithPopup(auth, provider);
-                    // O onAuthStateChanged vai atualizar o user automaticamente
                 } catch (error) {
                     console.error("Erro no login Google:", error);
                     alert("Erro ao conectar com Google. Verifique se o domínio está autorizado no Firebase.");
@@ -201,7 +197,7 @@
             const handleLogout = async () => {
                 try {
                     await signOut(auth);
-                    window.location.reload(); // Recarrega para reiniciar o fluxo (provavelmente anônimo)
+                    window.location.reload(); 
                 } catch (error) {
                     console.error("Erro ao sair:", error);
                 }
