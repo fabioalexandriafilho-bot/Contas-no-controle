@@ -217,6 +217,20 @@
                 const prompt = `Analise estes gastos:\n${summaryText}\nResuma onde estou gastando mais e dê uma dica de economia em português. Use emojis.`;
                 try { const txt = await callGeminiText(prompt); setAiAnalysis(txt); } catch (e) { setAiAnalysis("Erro na análise."); } finally { setIsAiAnalyzing(false); }
             };
+
+            // Função re-adicionada para corrigir o ReferenceError
+            const handleDescriptionChange = (e) => {
+                const val = e.target.value;
+                setDescription(val);
+                if (!editingId) {
+                    const lower = val.toLowerCase();
+                    let sug = 'Outros';
+                    if (type === 'income') { if (lower.includes('salario')) sug = 'Salário'; else if (lower.includes('invest')) sug = 'Investimentos'; }
+                    else { if (lower.includes('uber')) sug = 'Transporte'; else if (lower.includes('mercado')) sug = 'Alimentação'; else if (lower.includes('luz')) sug = 'Moradia'; }
+                    if (sug !== 'Outros') setCategory(sug);
+                }
+            };
+
             const handleEdit = (item) => {
                 setEditingId(item.id); setType(item.type); setAmount(item.amount.toString()); setDescription(item.description); setCategory(item.category || 'Outros');
                 const d = item.date instanceof Date ? item.date : item.date.toDate();
